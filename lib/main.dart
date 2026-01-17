@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.white),
         useMaterial3: true,
       ),
-      home: BlocProvider(create: (context)=> SearchCubit(),child: HOMEPAGE(),),
+      home: BlocProvider(create: (context) => SearchCubit(), child: HOMEPAGE()),
     );
   }
 }

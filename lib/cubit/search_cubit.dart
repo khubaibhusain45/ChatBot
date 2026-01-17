@@ -1,57 +1,65 @@
 import 'dart:convert';
-
 import 'package:chatbot/cubit/search_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
 
-class SearchCubit extends Cubit<SearchState> {
-  static List<Map<String, dynamic>> chatList = [];
+import '../database/db_helper.dart';
 
+class SearchCubit extends Cubit<SearchState> {
   SearchCubit() : super(SearchInitialState());
 
-  // events
+  List<Map<String, dynamic>> chatList = [];
+
+  Future<void> loadChats() async {
+    final data = await ChatDB.fetchChats();
+    chatList = data.map((e) {
+      return {
+        "role": e['role'],
+        "parts": [
+          {"text": e['message']},
+        ],
+      };
+    }).toList();
+    emit(SearchLoadedState(res: ""));
+  }
+
   void getSearchResponse({required String query}) async {
     emit(SearchLoadingState());
 
-    chatList.add( {
+    chatList.add({
       "role": "user",
       "parts": [
-        {
-          "text": query
-        }
-      ]
-    },);
+        {"text": query},
+      ],
+    });
 
-    String API_Key = "AIzaSyA2UmlpSOjoWcAB7pPd_bKyUd6cyVyuiwM";
-    String URL =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=$API_Key";
-    Map<String, dynamic> bodyParams = {"contents": chatList};
+    await ChatDB.insertChat("user", query);
 
-    var response = await http.post(
-      Uri.parse(URL),
-      body: jsonEncode(bodyParams),
+    const apiKey = "AIzaSyA2UmlpSOjoWcAB7pPd_bKyUd6cyVyuiwM";
+    final url =
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=$apiKey";
+
+    final response = await http.post(
+      Uri.parse(url),
+      body: jsonEncode({"contents": chatList}),
     );
+
     if (response.statusCode == 200) {
-      // For taking accurate data required rather than keys
-      var data = jsonDecode(response.body);
-      var res =
-          data['candidates'][0]["content"]["parts"][0]["text"]; // different for every API Key
+      final data = jsonDecode(response.body);
+      final res = data['candidates'][0]['content']['parts'][0]['text'];
 
-
-      chatList.add( {
+      chatList.add({
         "role": "model",
         "parts": [
-          {
-            "text": res
-          }
-        ]
-      },);
+          {"text": res},
+        ],
+      });
 
+      await ChatDB.insertChat("model", res);
 
       emit(SearchLoadedState(res: res));
     } else {
-      var error = "Error ${response.statusCode}";
-      emit(SearchErrorState(error: error));
+      emit(SearchErrorState(error: "Error ${response.statusCode}"));
     }
   }
 }

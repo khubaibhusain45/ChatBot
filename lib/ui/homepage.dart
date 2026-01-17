@@ -1,4 +1,3 @@
-import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:chatbot/cubit/search_cubit.dart';
 import 'package:chatbot/cubit/search_state.dart';
 import 'package:flutter/material.dart';
@@ -13,96 +12,123 @@ class HOMEPAGE extends StatefulWidget {
 }
 
 class _HOMEPAGEState extends State<HOMEPAGE> {
-  var search = TextEditingController();
-  Future<String>? resp;
+  final TextEditingController controller = TextEditingController();
+  final ScrollController scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<SearchCubit>().loadChats();
+  }
+
+  void scrollDown() {
+    Future.delayed(const Duration(milliseconds: 300), () {
+      scrollController.jumpTo(scrollController.position.maxScrollExtent);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-      },
+      onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         appBar: AppBar(
-          title: Text("ChatBot App"),
+          title: const Text("ChatBot"),
           centerTitle: true,
           backgroundColor: Colors.purple,
           foregroundColor: Colors.white,
-          elevation: 7,
-          shadowColor: Colors.purple,
         ),
-        body: Padding(
-          padding: EdgeInsets.only(top: 18, right: 12, left: 12, bottom: 20),
-          child: Column(
-            children: [
-              TextField(
-                controller: search,
-                decoration: InputDecoration(
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(width: 2),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(width: 3),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  label: Text("Search"),
-                  prefixIcon: Icon(Icons.search),
-                  hintText: "What's in your mind today?",
-                ),
-              ),
-              SizedBox(height: 11),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.purple,
-                    elevation: 11,
-                    shadowColor: Colors.purple,
-                  ),
-                  onPressed: () {
-                    if (search.text.isNotEmpty) {
-                      context.read<SearchCubit>().getSearchResponse(
-                        query: search.text,
-                      );
-                    }
-                  },
-                  label: Text("Search"),
-                  icon: Icon(Icons.search_outlined),
-                ),
-              ),
-              SizedBox(height: 21),
-              // GptMarkdown used for proper text formatting
-              Expanded(
-                child: BlocConsumer<SearchCubit, SearchState>(
-                  builder: (context, state) {
-                    if (state is SearchLoadingState) {
-                      return Center(child: CircularProgressIndicator());
-                    }
-                    if (state is SearchLoadedState) {
-                      return SingleChildScrollView(
-                        physics: BouncingScrollPhysics(),
-                        child: GptMarkdown(
-                          state.res,
-                          style: TextStyle(fontSize: 17),
+        body: Column(
+          children: [
+            Expanded(
+              child: BlocConsumer<SearchCubit, SearchState>(
+                listener: (_, __) => scrollDown(),
+                builder: (context, state) {
+                  final cubit = context.read<SearchCubit>();
+
+                  return ListView.builder(
+                    controller: scrollController,
+                    itemCount: cubit.chatList.length +
+                        (state is SearchLoadingState ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == cubit.chatList.length) {
+                        // Loading bubble
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: const SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        );
+                      }
+
+                      final msg = cubit.chatList[index];
+                      final isUser = msg['role'] == 'user';
+
+                      return Align(
+                        alignment: isUser
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(12),
+                          constraints: const BoxConstraints(maxWidth: 300),
+                          decoration: BoxDecoration(
+                            color: isUser ? Colors.purple : Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: isUser
+                              ? Text(
+                            msg['parts'][0]['text'],
+                            style: const TextStyle(color: Colors.white),
+                          )
+                              : GptMarkdown(msg['parts'][0]['text']),
                         ),
                       );
-                    }
+                    },
+                  );
 
-                    return SizedBox.shrink();
-                  },
-                  listener: (context, state) {
-                    if (state is SearchErrorState) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(state.error)));
-                    }
-                  },
-                ),
+                },
               ),
-            ],
-          ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(
+                        hintText: "Type a message...",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: Colors.purple),
+                    onPressed: () {
+                      if (controller.text.isNotEmpty) {
+                        context.read<SearchCubit>().getSearchResponse(
+                          query: controller.text,
+                        );
+                        controller.clear();
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
